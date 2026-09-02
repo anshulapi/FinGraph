@@ -1,0 +1,1 @@
+"""FinGraph application package."""

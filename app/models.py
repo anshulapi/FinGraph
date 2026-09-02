@@ -78,3 +78,35 @@ class StrategiesResponse(BaseModel):
 
     count: int
     strategies: List[Strategy]
+
+
+PolicyDecisionStatus = Literal["ALLOW", "BLOCK"]
+
+
+class PolicyEvidence(BaseModel):
+    """Typed strategy fields evaluated by the deterministic policy gate."""
+
+    action_type: str
+    source_order_id: str
+    currency: str
+    observed_amount: int
+    baseline_amount: float
+    uplift_ratio: float
+    maximum_allowed_uplift_ratio: float
+
+
+class PolicyDecision(BaseModel):
+    """An auditable gate decision for a strategy before human approval."""
+
+    decision: PolicyDecisionStatus
+    strategy: Strategy
+    rule_id: str
+    reason: str
+    evidence: PolicyEvidence
+
+
+class PolicyDecisionsResponse(BaseModel):
+    """Policy decisions derived from deterministic strategies."""
+
+    count: int
+    decisions: List[PolicyDecision]

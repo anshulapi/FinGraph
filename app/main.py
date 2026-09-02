@@ -7,11 +7,13 @@ from fastapi import FastAPI, HTTPException, Query
 from app.config import ConfigurationError, Settings
 from app.models import (
     NormalizedOrder,
+    PolicyDecisionsResponse,
     OpportunitiesResponse,
     OrdersResponse,
     StrategiesResponse,
 )
 from app.opportunities import detect_opportunities
+from app.policy import evaluate_strategies
 from app.razorpay import (
     RazorpayAPIError,
     RazorpayAuthenticationError,
@@ -79,3 +81,16 @@ def get_strategies(
     opportunities = detect_opportunities(orders)
     strategies = generate_strategies(opportunities)
     return StrategiesResponse(count=len(strategies), strategies=strategies)
+
+
+@app.get("/api/policy-decisions", response_model=PolicyDecisionsResponse)
+def get_policy_decisions(
+    count: int = Query(default=10, ge=1, le=100),
+    skip: int = Query(default=0, ge=0),
+) -> PolicyDecisionsResponse:
+    """Evaluate review-only strategies before they can reach human approval."""
+    orders = _fetch_razorpay_orders(count=count, skip=skip)
+    opportunities = detect_opportunities(orders)
+    strategies = generate_strategies(opportunities)
+    decisions = evaluate_strategies(strategies)
+    return PolicyDecisionsResponse(count=len(decisions), decisions=decisions)

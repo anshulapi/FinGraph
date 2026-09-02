@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException, Query
 
 from app.config import ConfigurationError, Settings
-from app.models import NormalizedOrder, OpportunitiesResponse, OrdersResponse
+from app.models import (
+    NormalizedOrder,
+    OpportunitiesResponse,
+    OrdersResponse,
+    StrategiesResponse,
+)
 from app.opportunities import detect_opportunities
 from app.razorpay import (
     RazorpayAPIError,
@@ -14,6 +19,7 @@ from app.razorpay import (
     RazorpayError,
     RazorpayNetworkError,
 )
+from app.strategies import generate_strategies
 
 app = FastAPI(title="FinGraph", version="0.1.0")
 
@@ -61,3 +67,15 @@ def get_opportunities(
     orders = _fetch_razorpay_orders(count=count, skip=skip)
     opportunities = detect_opportunities(orders)
     return OpportunitiesResponse(count=len(opportunities), opportunities=opportunities)
+
+
+@app.get("/api/strategies", response_model=StrategiesResponse)
+def get_strategies(
+    count: int = Query(default=10, ge=1, le=100),
+    skip: int = Query(default=0, ge=0),
+) -> StrategiesResponse:
+    """Generate review-only strategies from Razorpay Test Mode order evidence."""
+    orders = _fetch_razorpay_orders(count=count, skip=skip)
+    opportunities = detect_opportunities(orders)
+    strategies = generate_strategies(opportunities)
+    return StrategiesResponse(count=len(strategies), strategies=strategies)

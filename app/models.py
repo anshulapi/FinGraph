@@ -43,3 +43,38 @@ class OpportunitiesResponse(BaseModel):
 
     count: int
     opportunities: List[Opportunity]
+
+
+class HighValueOrderReviewParameters(BaseModel):
+    """Evidence required for a non-executing high-value-order review."""
+
+    source_order_id: str
+    currency: str
+    observed_amount: int
+    baseline_amount: float
+    uplift_ratio: float
+
+
+class StrategyAction(BaseModel):
+    """A typed action proposal that remains non-executing at this milestone."""
+
+    action_type: Literal["review_high_value_order"]
+    parameters: HighValueOrderReviewParameters
+
+
+class Strategy(BaseModel):
+    """A deterministic, review-only response to an opportunity."""
+
+    opportunity: Opportunity
+    proposed_action: StrategyAction
+    reasoning: str
+    expected_outcome: str
+    confidence: Literal["low"]
+    confidence_rationale: str
+
+
+class StrategiesResponse(BaseModel):
+    """Strategies derived from deterministic opportunities."""
+
+    count: int
+    strategies: List[Strategy]

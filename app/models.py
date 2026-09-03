@@ -110,3 +110,24 @@ class PolicyDecisionsResponse(BaseModel):
 
     count: int
     decisions: List[PolicyDecision]
+ApprovalAction = Literal["APPROVE", "REJECT"]
+ApprovalStatus = Literal["APPROVED", "REJECTED"]
+
+
+class ApprovalRequest(BaseModel):
+    """An explicit human decision on an ALLOW policy decision."""
+
+    policy_decision: PolicyDecision
+    action: ApprovalAction
+    approver: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class ApprovalResult(BaseModel):
+    """The result of an explicit human approval or rejection."""
+
+    policy_decision: PolicyDecision
+    status: ApprovalStatus
+    approver: str
+    reason: str
+    decided_at: datetime

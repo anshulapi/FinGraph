@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, HTTPException, Query
 
+from app.approvals import ApprovalNotAllowedError, create_approval
 from app.config import ConfigurationError, Settings
 from app.models import (
+    ApprovalRequest,
+    ApprovalResult,
     NormalizedOrder,
     PolicyDecisionsResponse,
     OpportunitiesResponse,
@@ -94,3 +99,14 @@ def get_policy_decisions(
     strategies = generate_strategies(opportunities)
     decisions = evaluate_strategies(strategies)
     return PolicyDecisionsResponse(count=len(decisions), decisions=decisions)
+
+@app.post("/api/approvals", response_model=ApprovalResult)
+def post_approval(request: ApprovalRequest) -> ApprovalResult:
+    """Record an explicit human approval or rejection."""
+    try:
+        return create_approval(
+            request,
+            decided_at=datetime.now(timezone.utc),
+        )
+    except ApprovalNotAllowedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

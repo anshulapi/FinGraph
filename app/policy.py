@@ -7,21 +7,23 @@ from typing import List, Sequence
 from app.models import PolicyDecision, PolicyEvidence, Strategy
 
 MAX_REVIEW_UPLIFT_RATIO = 3.0
-"""Maximum uplift ratio eligible for automatic progression to human approval."""
+"""Maximum uplift ratio eligible for progression to human approval."""
 
-ALLOWED_ACTION_TYPE = "review_high_value_order"
+ALLOWED_ACTION_TYPE = "create_payment_link"
 
 
 def _policy_evidence(strategy: Strategy) -> PolicyEvidence:
-    """Capture exactly the typed action fields used by every policy rule."""
+    """Capture the typed action and opportunity fields used by policy rules."""
     parameters = strategy.proposed_action.parameters
+    opportunity = strategy.opportunity
+
     return PolicyEvidence(
         action_type=str(strategy.proposed_action.action_type),
-        source_order_id=parameters.source_order_id,
-        currency=parameters.currency,
-        observed_amount=parameters.observed_amount,
-        baseline_amount=parameters.baseline_amount,
-        uplift_ratio=parameters.uplift_ratio,
+        source_order_id=opportunity.source_order_id,
+        currency=opportunity.currency,
+        observed_amount=opportunity.observed_amount,
+        baseline_amount=opportunity.baseline_amount,
+        uplift_ratio=opportunity.uplift_ratio,
         maximum_allowed_uplift_ratio=MAX_REVIEW_UPLIFT_RATIO,
     )
 
@@ -37,11 +39,11 @@ def _block(strategy: Strategy, rule_id: str, reason: str) -> PolicyDecision:
 
 
 def evaluate_strategy(strategy: Strategy) -> PolicyDecision:
-    """Allow only bounded, evidence-consistent review strategies.
+    """Allow only bounded, evidence-consistent payment-link strategies.
 
-    Rules are evaluated in a fixed order: action allowlist, evidence matching,
-    then the uplift cap. A blocked decision is terminal and can be displayed in
-    an audit trail; only an allowed decision should advance to human approval.
+    Rules are evaluated in a fixed order: action allowlist, payment-link
+    parameter validation, evidence validation, then the uplift cap.
+    A blocked decision is terminal and cannot advance to human approval.
     """
     if strategy.proposed_action.action_type != ALLOWED_ACTION_TYPE:
         return _block(
@@ -52,30 +54,55 @@ def evaluate_strategy(strategy: Strategy) -> PolicyDecision:
 
     parameters = strategy.proposed_action.parameters
     opportunity = strategy.opportunity
-    fields_to_match = (
-        "source_order_id",
-        "currency",
-        "observed_amount",
-        "baseline_amount",
-        "uplift_ratio",
-    )
-    mismatched_fields = [
-        field for field in fields_to_match if getattr(parameters, field) != getattr(opportunity, field)
-    ]
-    if mismatched_fields:
+
+    if parameters.amount != opportunity.observed_amount:
+        return _block(
+            strategy,
+            "payment_link_amount_mismatch",
+            "Payment Link amount does not match the observed opportunity amount.",
+        )
+
+    if parameters.currency != opportunity.currency:
+        return _block(
+            strategy,
+            "payment_link_currency_mismatch",
+            "Payment Link currency does not match the opportunity currency.",
+        )
+
+    expected_reference_id = f"fingraph-{opportunity.source_order_id}"
+    if parameters.reference_id != expected_reference_id:
+        return _block(
+            strategy,
+            "payment_link_reference_mismatch",
+            "Payment Link reference_id does not match the source order.",
+        )
+
+    if parameters.description.strip() == "":
+        return _block(
+            strategy,
+            "payment_link_description_invalid",
+            "Payment Link description cannot be empty.",
+        )
+
+    if parameters.amount <= 0:
+        return _block(
+            strategy,
+            "payment_link_amount_invalid",
+            "Payment Link amount must be greater than zero.",
+        )
+
+    if parameters.currency != opportunity.currency:
         return _block(
             strategy,
             "strategy_evidence_mismatch",
-            "Action parameters do not match the opportunity evidence for: "
-            + ", ".join(mismatched_fields)
-            + ".",
+            "Action parameters do not match the opportunity currency.",
         )
 
-    if parameters.uplift_ratio > MAX_REVIEW_UPLIFT_RATIO:
+    if opportunity.uplift_ratio > MAX_REVIEW_UPLIFT_RATIO:
         return _block(
             strategy,
             "maximum_uplift_ratio_exceeded",
-            f"Order uplift ratio {parameters.uplift_ratio:.0%} exceeds the maximum "
+            f"Order uplift ratio {opportunity.uplift_ratio:.0%} exceeds the maximum "
             f"allowed {MAX_REVIEW_UPLIFT_RATIO:.0%}.",
         )
 
@@ -84,13 +111,16 @@ def evaluate_strategy(strategy: Strategy) -> PolicyDecision:
         strategy=strategy,
         rule_id="all_policy_rules_passed",
         reason=(
-            "Strategy uses the allowlisted review action, its parameters match the "
-            "opportunity evidence, and its uplift ratio is within the maximum allowed limit."
+            "Strategy uses the allowlisted Payment Link action, the amount and "
+            "currency match the opportunity evidence, the reference identifies "
+            "the source order, and the uplift ratio is within the maximum allowed limit."
         ),
         evidence=_policy_evidence(strategy),
     )
 
 
-def evaluate_strategies(strategies: Sequence[Strategy]) -> List[PolicyDecision]:
+def evaluate_strategies(
+    strategies: Sequence[Strategy],
+) -> List[PolicyDecision]:
     """Evaluate strategies in stable input order without side effects."""
     return [evaluate_strategy(strategy) for strategy in strategies]

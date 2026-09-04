@@ -6,11 +6,15 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 
+from app.audit import AuditStore
+
 from app.approvals import ApprovalNotAllowedError, create_approval
+from app.execution import ExecutionNotAllowedError, execute_approved_action
 from app.config import ConfigurationError, Settings
 from app.models import (
     ApprovalRequest,
     ApprovalResult,
+    ExecutionResult,
     NormalizedOrder,
     PolicyDecisionsResponse,
     OpportunitiesResponse,
@@ -110,3 +114,36 @@ def post_approval(request: ApprovalRequest) -> ApprovalResult:
         )
     except ApprovalNotAllowedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/executions", response_model=ExecutionResult)
+def post_execution(approval: ApprovalResult) -> ExecutionResult:
+    """Execute an explicitly approved FinGraph action."""
+    client = None
+
+    try:
+        settings = Settings.from_environment()
+        client = RazorpayClient(settings)
+
+        return execute_approved_action(
+            approval,
+            razorpay_client=client,
+            executed_at=datetime.now(timezone.utc),
+        )
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ExecutionNotAllowedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    finally:
+        if client is not None:
+            client.close()
+
+
+@app.get("/api/audit-log")
+def get_audit_log():
+    """Return the persisted FinGraph audit trail."""
+    store = AuditStore()
+    return {
+        "count": len(store.list_events()),
+        "events": store.list_events(),
+    }

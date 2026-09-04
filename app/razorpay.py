@@ -82,3 +82,48 @@ class RazorpayClient:
             raise RazorpayError("Razorpay returned an invalid orders response.") from exc
 
         return [normalize_order(item) for item in items]
+
+    def create_payment_link(
+        self,
+        *,
+        amount: int,
+        currency: str,
+        reference_id: str,
+        description: str,
+    ) -> Dict[str, Any]:
+        """Create a Standard Payment Link in Razorpay Test Mode."""
+        payload = {
+            "amount": amount,
+            "currency": currency,
+            "reference_id": reference_id,
+            "description": description,
+        }
+
+        try:
+            response = self._http_client.post(
+                "/payment_links",
+                json=payload,
+            )
+        except httpx.RequestError as exc:
+            raise RazorpayNetworkError(
+                "Unable to reach Razorpay Test Mode API."
+            ) from exc
+
+        if response.status_code in (401, 403):
+            raise RazorpayAuthenticationError(
+                "Razorpay rejected the Test Mode credentials."
+            )
+
+        if response.is_error:
+            raise RazorpayAPIError(response.status_code)
+
+        try:
+            result = response.json()
+            if not isinstance(result, dict):
+                raise TypeError("payment link response is not an object")
+        except (TypeError, ValueError) as exc:
+            raise RazorpayError(
+                "Razorpay returned an invalid payment link response."
+            ) from exc
+
+        return result

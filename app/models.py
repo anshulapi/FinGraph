@@ -45,21 +45,23 @@ class OpportunitiesResponse(BaseModel):
     opportunities: List[Opportunity]
 
 
-class HighValueOrderReviewParameters(BaseModel):
-    """Evidence required for a non-executing high-value-order review."""
+class CreatePaymentLinkStrategyParameters(BaseModel):
+    """Bounded parameters proposed for a Razorpay Payment Link."""
 
-    source_order_id: str
+    amount: int = Field(
+        gt=0,
+        description="Amount in the smallest currency unit.",
+    )
     currency: str
-    observed_amount: int
-    baseline_amount: float
-    uplift_ratio: float
+    reference_id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
 
 
 class StrategyAction(BaseModel):
-    """A typed action proposal that remains non-executing at this milestone."""
+    """A typed executable action proposal that remains gated."""
 
-    action_type: Literal["review_high_value_order"]
-    parameters: HighValueOrderReviewParameters
+    action_type: Literal["create_payment_link"]
+    parameters: CreatePaymentLinkStrategyParameters
 
 
 class Strategy(BaseModel):
@@ -131,3 +133,37 @@ class ApprovalResult(BaseModel):
     approver: str
     reason: str
     decided_at: datetime
+
+
+class CreatePaymentLinkParameters(BaseModel):
+    """Bounded parameters for creating a Razorpay Payment Link."""
+
+    amount: int = Field(
+        gt=0,
+        description="Amount in the smallest currency unit.",
+    )
+    currency: str
+    reference_id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
+class ExecutionAction(BaseModel):
+    """A typed executable action approved before execution."""
+
+    action_type: Literal["create_payment_link"]
+    parameters: CreatePaymentLinkParameters
+
+
+ExecutionStatus = Literal["SUCCESS", "FAILED"]
+
+
+class ExecutionResult(BaseModel):
+    """Normalized result of an execution attempt."""
+
+    status: ExecutionStatus
+    action: ExecutionAction
+    provider_id: Optional[str] = None
+    provider_url: Optional[str] = None
+    provider_status: Optional[str] = None
+    error: Optional[str] = None
+    executed_at: datetime

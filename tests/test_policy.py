@@ -38,20 +38,64 @@ def test_uplift_above_maximum_is_blocked():
     assert "301% exceeds the maximum allowed 300%" in decision.reason
 
 
-def test_mismatched_action_evidence_is_blocked():
+def test_payment_link_amount_mismatch_is_blocked():
     strategy = make_strategy()
+
     mismatched_parameters = strategy.proposed_action.parameters.model_copy(
-        update={"observed_amount": 999}
+        update={"amount": 999}
     )
     mismatched_strategy = strategy.model_copy(
-        update={"proposed_action": strategy.proposed_action.model_copy(update={"parameters": mismatched_parameters})}
+        update={
+            "proposed_action": strategy.proposed_action.model_copy(
+                update={"parameters": mismatched_parameters}
+            )
+        }
     )
 
     decision = evaluate_strategy(mismatched_strategy)
 
     assert decision.decision == "BLOCK"
-    assert decision.rule_id == "strategy_evidence_mismatch"
-    assert "observed_amount" in decision.reason
+    assert decision.rule_id == "payment_link_amount_mismatch"
+
+
+def test_payment_link_currency_mismatch_is_blocked():
+    strategy = make_strategy()
+
+    mismatched_parameters = strategy.proposed_action.parameters.model_copy(
+        update={"currency": "USD"}
+    )
+    mismatched_strategy = strategy.model_copy(
+        update={
+            "proposed_action": strategy.proposed_action.model_copy(
+                update={"parameters": mismatched_parameters}
+            )
+        }
+    )
+
+    decision = evaluate_strategy(mismatched_strategy)
+
+    assert decision.decision == "BLOCK"
+    assert decision.rule_id == "payment_link_currency_mismatch"
+
+
+def test_payment_link_reference_mismatch_is_blocked():
+    strategy = make_strategy()
+
+    mismatched_parameters = strategy.proposed_action.parameters.model_copy(
+        update={"reference_id": "unexpected-reference"}
+    )
+    mismatched_strategy = strategy.model_copy(
+        update={
+            "proposed_action": strategy.proposed_action.model_copy(
+                update={"parameters": mismatched_parameters}
+            )
+        }
+    )
+
+    decision = evaluate_strategy(mismatched_strategy)
+
+    assert decision.decision == "BLOCK"
+    assert decision.rule_id == "payment_link_reference_mismatch"
 
 
 def test_unsupported_action_type_is_blocked():
@@ -75,11 +119,12 @@ def test_empty_strategy_list_produces_no_decisions():
     assert evaluate_strategies([]) == []
 
 
-def test_policy_output_makes_no_customer_product_payment_or_campaign_claims():
+def test_policy_output_describes_bounded_action_without_unsupported_claims():
     decision = evaluate_strategy(make_strategy())
     combined_text = f"{decision.reason} {decision.rule_id}".lower()
 
     assert "customer" not in combined_text
     assert "product" not in combined_text
-    assert "payment" not in combined_text
     assert "campaign" not in combined_text
+    assert "amount" in combined_text
+    assert "currency" in combined_text

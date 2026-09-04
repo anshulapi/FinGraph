@@ -7,12 +7,12 @@ import pytest
 from app.approvals import ApprovalNotAllowedError, create_approval
 from app.models import (
     ApprovalRequest,
+    CreatePaymentLinkStrategyParameters,
+    Opportunity,
     PolicyDecision,
     PolicyEvidence,
     Strategy,
     StrategyAction,
-    HighValueOrderReviewParameters,
-    Opportunity,
 )
 
 
@@ -35,27 +35,27 @@ def make_policy_decision(decision: str = "ALLOW") -> PolicyDecision:
     strategy = Strategy(
         opportunity=opportunity,
         proposed_action=StrategyAction(
-            action_type="review_high_value_order",
-            parameters=HighValueOrderReviewParameters(
-                source_order_id="order_test_001",
+            action_type="create_payment_link",
+            parameters=CreatePaymentLinkStrategyParameters(
+                amount=20000,
                 currency="INR",
-                observed_amount=20000,
-                baseline_amount=10000.0,
-                uplift_ratio=1.0,
+                reference_id="fingraph-order_test_001",
+                description="FinGraph growth action for order order_test_001",
             ),
         ),
         reasoning=(
-            "Review the order-level value signal before considering "
-            "any future action."
+            "Order order_test_001 is 100% above the INR baseline of "
+            "10000. Propose a bounded payment-link action using the "
+            "observed order amount."
         ),
         expected_outcome=(
-            "Creates a human-reviewable record of the order-level "
-            "value signal."
+            "Creates a Razorpay Payment Link for the observed order "
+            "amount after policy approval and explicit human approval."
         ),
         confidence="low",
         confidence_rationale=(
-            "Confidence is low because customer, product, catalog, "
-            "and payment-history context is unavailable."
+            "Confidence is low because the available evidence has no "
+            "customer, product, catalog, or payment-history context."
         ),
     )
 
@@ -73,7 +73,7 @@ def make_policy_decision(decision: str = "ALLOW") -> PolicyDecision:
             else "Order uplift exceeds the maximum allowed limit."
         ),
         evidence=PolicyEvidence(
-            action_type="review_high_value_order",
+            action_type="create_payment_link",
             source_order_id="order_test_001",
             currency="INR",
             observed_amount=20000,

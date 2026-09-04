@@ -3,6 +3,7 @@ import pytest
 
 from app.config import Settings
 from app.razorpay import (
+    RazorpayAPIError,
     RazorpayAuthenticationError,
     RazorpayClient,
     RazorpayNetworkError,
@@ -86,3 +87,94 @@ def test_client_maps_network_error():
 
     with pytest.raises(RazorpayNetworkError):
         client.list_orders()
+def test_client_creates_payment_link():
+    def handler(request):
+        assert request.url.path == "/v1/payment_links"
+        assert request.method == "POST"
+
+        import json
+
+        body = json.loads(request.content.decode("utf-8"))
+        assert body == {
+            "amount": 20000,
+            "currency": "INR",
+            "reference_id": "fingraph-test-link-001",
+            "description": "FinGraph approved growth action",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "id": "plink_test_123",
+                "amount": 20000,
+                "currency": "INR",
+                "reference_id": "fingraph-test-link-001",
+                "description": "FinGraph approved growth action",
+                "status": "created",
+                "short_url": "https://rzp.io/i/test123",
+            },
+        )
+
+    http_client = httpx.Client(
+        base_url="https://api.razorpay.com/v1",
+        transport=httpx.MockTransport(handler),
+    )
+    client = RazorpayClient(
+        Settings("rzp_test_example", "test-secret"),
+        http_client=http_client,
+    )
+
+    result = client.create_payment_link(
+        amount=20000,
+        currency="INR",
+        reference_id="fingraph-test-link-001",
+        description="FinGraph approved growth action",
+    )
+
+    assert result["id"] == "plink_test_123"
+    assert result["short_url"] == "https://rzp.io/i/test123"
+    assert result["status"] == "created"
+
+
+def test_client_maps_payment_link_api_error():
+    http_client = httpx.Client(
+        base_url="https://api.razorpay.com/v1",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(400)
+        ),
+    )
+    client = RazorpayClient(
+        Settings("rzp_test_example", "test-secret"),
+        http_client=http_client,
+    )
+
+    with pytest.raises(RazorpayAPIError) as exc_info:
+        client.create_payment_link(
+            amount=20000,
+            currency="INR",
+            reference_id="fingraph-test-link-002",
+            description="FinGraph approved growth action",
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+def test_client_maps_payment_link_network_error():
+    def handler(request):
+        raise httpx.ConnectError("offline", request=request)
+
+    http_client = httpx.Client(
+        base_url="https://api.razorpay.com/v1",
+        transport=httpx.MockTransport(handler),
+    )
+    client = RazorpayClient(
+        Settings("rzp_test_example", "test-secret"),
+        http_client=http_client,
+    )
+
+    with pytest.raises(RazorpayNetworkError):
+        client.create_payment_link(
+            amount=20000,
+            currency="INR",
+            reference_id="fingraph-test-link-003",
+            description="FinGraph approved growth action",
+        )

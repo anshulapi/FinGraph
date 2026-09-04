@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Sequence
 
 from app.models import (
-    HighValueOrderReviewParameters,
+    CreatePaymentLinkStrategyParameters,
     Opportunity,
     Strategy,
     StrategyAction,
@@ -13,46 +13,52 @@ from app.models import (
 
 
 def generate_strategies(opportunities: Sequence[Opportunity]) -> List[Strategy]:
-    """Generate one conservative review strategy for each supported opportunity.
+    """Generate one bounded payment-link strategy for each opportunity.
 
-    The current data contains only order-level evidence. Strategies therefore
-    propose a review-only action and make no customer, product, discount,
-    campaign, or payment recommendation.
+    The action is only a proposal. It is not executed here.
+    Human approval remains required before execution.
     """
     strategies: List[Strategy] = []
+
     for opportunity in opportunities:
         if opportunity.opportunity_type != "high_value_order":
             continue
 
-        parameters = HighValueOrderReviewParameters(
-            source_order_id=opportunity.source_order_id,
+        parameters = CreatePaymentLinkStrategyParameters(
+            amount=opportunity.observed_amount,
             currency=opportunity.currency,
-            observed_amount=opportunity.observed_amount,
-            baseline_amount=opportunity.baseline_amount,
-            uplift_ratio=opportunity.uplift_ratio,
+            reference_id=f"fingraph-{opportunity.source_order_id}",
+            description=(
+                f"FinGraph growth action for order "
+                f"{opportunity.source_order_id}"
+            ),
         )
+
         strategies.append(
             Strategy(
                 opportunity=opportunity,
                 proposed_action=StrategyAction(
-                    action_type="review_high_value_order",
+                    action_type="create_payment_link",
                     parameters=parameters,
                 ),
                 reasoning=(
-                    f"Order {opportunity.source_order_id} is {opportunity.uplift_ratio:.0%} "
-                    f"above the {opportunity.currency} baseline of "
-                    f"{opportunity.baseline_amount:g}. Review this order-level value "
-                    "signal before considering any future action."
+                    f"Order {opportunity.source_order_id} is "
+                    f"{opportunity.uplift_ratio:.0%} above the "
+                    f"{opportunity.currency} baseline of "
+                    f"{opportunity.baseline_amount:g}. "
+                    "Propose a bounded payment-link action using "
+                    "the observed order amount."
                 ),
                 expected_outcome=(
-                    "Creates a human-reviewable record of the order-level value signal; "
-                    "it does not contact a customer, select a product, offer a discount, "
-                    "send a campaign, or create a payment."
+                    "Creates a Razorpay Payment Link for the observed "
+                    "order amount after policy approval and explicit "
+                    "human approval."
                 ),
                 confidence="low",
                 confidence_rationale=(
-                    "Confidence is low because the available evidence has no customer, "
-                    "product, catalog, or payment-history context."
+                    "Confidence is low because the available evidence "
+                    "has no customer, product, catalog, or payment-history "
+                    "context."
                 ),
             )
         )
